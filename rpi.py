@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 import serial
-from oak_d_test import device, q_rgb, q_nn
+import cv2
+from oak_d_test import device, q_rgb, q_nn, frame, detections, frameNorm
 
 if __name__ == '__main__':
     # the same baud rate as the one used on Arduino
-    ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
+    # ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
     # clear what could be left in the buffer
-    ser.reset_input_buffer()
+    # ser.reset_input_buffer()
 
     while True:
-        if ser.in_waiting > 0:
-            line = ser.readline().decode('utf-8').rstrip()
-            print(line)
+        # if ser.in_waiting > 0:
+        #     line = ser.readline().decode('utf-8').rstrip()
+        #     print(line)
 
        # we try to fetch the data from nn/rgb queues. tryGet will return either the data packet or None if there isn't any
         in_rgb = q_rgb.tryGet()
