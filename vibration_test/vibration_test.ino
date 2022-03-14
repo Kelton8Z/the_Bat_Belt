@@ -1,4 +1,4 @@
-int vibNum = 5;
+int vibNum = 6;
 
 
 void setup() {
