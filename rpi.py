@@ -3,17 +3,30 @@ import serial
 import cv2
 # from oak_d_test import device, frame, depth
 import oak_d_test
+from collections import defaultdict
 
 if __name__ == '__main__':
     # the same baud rate as the one used on Arduino
-    # ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
+    ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
     # clear what could be left in the buffer
-    # ser.reset_input_buffer()
+    ser.reset_input_buffer()
+    historical_readings = defaultdict(list)
+    # distance_threshold = 100
+    for i in range(1, 7):
+        historical_readings[i] = [0]
 
     while True:
-        # if ser.in_waiting > 0:
-        #     line = ser.readline().decode('utf-8').rstrip()
-        #     print(line)
+        ser.write("activateSensor")
+        if ser.in_waiting > 0:
+            line = ser.readline().decode('utf-8').rstrip()
+            # data: <sensornum 1-6> <reading 0-500> 
+            # msg: <debug msg>
+            print(line)
+            if line.startswith('data'):
+                _, module_idx, sensor_reading = line.split(' ')
+                historical_readings[module_idx].append(sensor_reading)
+            elif line.startswith('msg'):
+                pass
 
         edgeLeftFrame, edgeRightFrame, edgeRgbFrame = oak_d_test.getEdgeFrames()
         # Show the frame
@@ -44,7 +57,23 @@ if __name__ == '__main__':
             
         # Rate “threat level” of each identified obstacle based on distance and speed
         # Activate vibration system accordingly
-        intensity = -1
-        # 
-     
-
+        # intensities = [0 for i in range(6)]
+        
+        # activateVibrator <num 1-6> <level 1-3>
+        # deactivateVibrator <num>
+        # deactivateSensor
+        
+        for module_idx in module_indices:
+            intensity = intensities[module_idx-1]
+            last_reading = historical_readings[module_idx].pop(0)
+            dx = historical_readings[module_idx][-1] - last_reading
+            if dx > 300:
+                intensity = 3
+            elif dx > 200:
+                intensity = 2
+            elif dx > 100:
+                intensity = 1
+            if intensity > 0:
+                ser.write("activateVibrator " + module_idx +  intensity)
+            else:
+                ser.write("deactivateVibrator " + module_idx)
