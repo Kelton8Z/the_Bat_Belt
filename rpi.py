@@ -2,7 +2,7 @@
 import serial
 import cv2
 # from oak_d_test import device, frame, depth
-import oak_d_test
+# import oak_d_test
 from collections import defaultdict
 
 if __name__ == '__main__':
@@ -17,7 +17,13 @@ if __name__ == '__main__':
         historical_readings[i] = [0]
 
     while True:
-        ser.write("activateSensor")
+        if ser.in_waiting > 0:
+            line = ser.readline().decode('utf-8').rstrip()
+            if line == 'SystemOnline':
+                break
+    
+    ser.write(b"activateSensor")
+    while True:
         if ser.in_waiting > 0:
             line = ser.readline().decode('utf-8').rstrip()
             # data: <sensornum 1-6> <reading 0-500> 
@@ -25,17 +31,19 @@ if __name__ == '__main__':
             print(line)
             if line.startswith('data'):
                 _, module_idx, sensor_reading = line.split(' ')
+                module_idx = int(module_idx)
+                sensor_reading = int(sensor_reading)
                 module_indices.append(module_idx)
                 historical_readings[module_idx].append(sensor_reading)
             elif line.startswith('msg'):
                 pass
             elif line.startswith('error'):
                 print(line)
-        edgeLeftFrame, edgeRightFrame, edgeRgbFrame = oak_d_test.getEdgeFrames()
-        # Show the frame
-        cv2.imshow(oak_d_test.edgeLeftStr, edgeLeftFrame)
-        cv2.imshow(oak_d_test.edgeRightStr, edgeRightFrame)
-        cv2.imshow(oak_d_test.edgeRgbStr, edgeRgbFrame)
+        # edgeLeftFrame, edgeRightFrame, edgeRgbFrame = oak_d_test.getEdgeFrames()
+        # # Show the frame
+        # cv2.imshow(oak_d_test.edgeLeftStr, edgeLeftFrame)
+        # cv2.imshow(oak_d_test.edgeRightStr, edgeRightFrame)
+        # cv2.imshow(oak_d_test.edgeRgbStr, edgeRgbFrame)
 
         # frame = oak_d_test.getDisparityFrame()
 
@@ -62,23 +70,28 @@ if __name__ == '__main__':
         # Activate vibration system accordingly
         # intensities = [0 for i in range(6)]
         
-        # activateVibrator <num 1-6> <level 1-3>
+        # modifyVibrator <num 1-6><level 1-3>
         # deactivateVibrator <num>
         # deactivateSensor
-        
         for module_idx in module_indices:
-            last_reading = historical_readings[module_idx].pop(0)
-            current_reading = historical_readings[module_idx][-1]
-            dx = current_reading - last_reading
-            # 200ms between readings
-            # e.g. 1m/s = 200cm/0.2s
-            if dx > 300 or current_reading <= 100: # speed>3m/s or distance <= 1m
-                intensity = 3
-            elif dx > 200 or current_reading <= 200: # speed>2m/s or distance <= 2m
-                intensity = 2
-            elif dx > 100 or current_reading <= 450: # speed>1m/s or distance <= 4.5m
-                intensity = 1
-            if intensity > 0:
-                ser.write("modifyVibrator " + str(module_idx) +  str(intensity))
-            else:
-                ser.write("modifyVibrator " + str(module_idx))
+            if len(historical_readings[module_idx]) >= 1:
+                print(historical_readings)
+                current_reading = historical_readings[module_idx][-1]
+            
+                last_reading = historical_readings[module_idx].pop(0)
+                dx = current_reading - last_reading
+                # 200ms between readings
+                # e.g. 1m/s = 200cm/0.2s
+                if dx > 300 or current_reading <= 100: # speed>3m/s or distance <= 1m
+                    intensity = 3
+                elif dx > 200 or current_reading <= 200: # speed>2m/s or distance <= 2m
+                    intensity = 2
+                elif dx > 100 or current_reading <= 450: # speed>1m/s or distance <= 4.5m
+                    intensity = 1
+                else:
+                    intensity = 0
+                print(intensity)
+                if intensity > 0:
+                    ser.write(bytes("modifyVibrator " + str(module_idx) +  str(intensity), 'utf-8'))
+                else:
+                    ser.write(bytes("modifyVibrator " + str(module_idx), 'utf-8'))
