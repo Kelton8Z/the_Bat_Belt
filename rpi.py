@@ -10,6 +10,7 @@ if __name__ == '__main__':
     ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
     # clear what could be left in the buffer
     ser.reset_input_buffer()
+    module_indices = []
     historical_readings = defaultdict(list)
     # distance_threshold = 100
     for i in range(1, 7):
@@ -24,10 +25,12 @@ if __name__ == '__main__':
             print(line)
             if line.startswith('data'):
                 _, module_idx, sensor_reading = line.split(' ')
+                module_indices.append(module_idx)
                 historical_readings[module_idx].append(sensor_reading)
             elif line.startswith('msg'):
                 pass
-
+            elif line.startswith('error'):
+                print(line)
         edgeLeftFrame, edgeRightFrame, edgeRgbFrame = oak_d_test.getEdgeFrames()
         # Show the frame
         cv2.imshow(oak_d_test.edgeLeftStr, edgeLeftFrame)
@@ -64,16 +67,18 @@ if __name__ == '__main__':
         # deactivateSensor
         
         for module_idx in module_indices:
-            intensity = intensities[module_idx-1]
             last_reading = historical_readings[module_idx].pop(0)
-            dx = historical_readings[module_idx][-1] - last_reading
-            if dx > 300:
+            current_reading = historical_readings[module_idx][-1]
+            dx = current_reading - last_reading
+            # 200ms between readings
+            # e.g. 1m/s = 200cm/0.2s
+            if dx > 300 or current_reading <= 100: # speed>3m/s or distance <= 1m
                 intensity = 3
-            elif dx > 200:
+            elif dx > 200 or current_reading <= 200: # speed>2m/s or distance <= 2m
                 intensity = 2
-            elif dx > 100:
+            elif dx > 100 or current_reading <= 450: # speed>1m/s or distance <= 4.5m
                 intensity = 1
             if intensity > 0:
-                ser.write("activateVibrator " + module_idx +  intensity)
+                ser.write("modifyVibrator " + str(module_idx) +  str(intensity))
             else:
-                ser.write("deactivateVibrator " + module_idx)
+                ser.write("modifyVibrator " + str(module_idx))
