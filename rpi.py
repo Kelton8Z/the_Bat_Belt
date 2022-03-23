@@ -91,7 +91,16 @@ if __name__ == '__main__':
                 else:
                     intensity = 0
                 print(intensity)
-                if intensity > 0:
-                    ser.write(bytes("modifyVibrator " + str(module_idx) +  str(intensity), 'utf-8'))
+                if intensity > 0 and intensity != last_intensities[module_idx]:
+                    last_intensities[module_idx] = intensity
+                    ser.write(bytes("modifyVibrator " + str(module_idx) + str(intensity), 'utf-8'))
+                    print("modifyVibrator " + str(module_idx) +  str(intensity))
                 else:
                     ser.write(bytes("modifyVibrator " + str(module_idx), 'utf-8'))
+
+        # if input("break ?")=='b':
+        # if keyboard.read_key():
+        #     for module_idx in range(1, 7):
+        #         ser.write(bytes("modifyVibrator " + str(module_idx) +  '0', 'utf-8'))
+        #         ser.write(bytes("deactivateSensor", 'utf-8'))
+        #     break
