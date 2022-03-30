@@ -55,9 +55,9 @@ depthOut.setStreamName("depth")
 # Linking
 monoLeft.out.link(stereo.left)
 monoRight.out.link(stereo.right)
-stereo.depth.link(edgeDetector.inputImage)
+stereo.disparity.link(edgeDetector.inputImage)
 edgeDetector.outputImage.link(edgeOut.input)
-stereo.disparity.link(depthOut.input)
+stereo.depth.link(depthOut.input)
 
 device = dai.Device(pipeline)
 # Output/input queues
@@ -65,7 +65,7 @@ edgeQueue = device.getOutputQueue(name="edge", maxSize=4, blocking=False)
 depthQueue = device.getOutputQueue(name="depth", maxSize=4, blocking=False)
 
 def getDepthFrame():
-    return depthQueue.get().getFrame()
+    return depthQueue.get()
 
 def getEdgeFrame():
     return edgeQueue.get().getFrame()
