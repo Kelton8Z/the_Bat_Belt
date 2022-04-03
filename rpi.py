@@ -1,28 +1,44 @@
 #!/usr/bin/env python3
-import serial
+# import serial
 import cv2
 import numpy as np
 from oak_d_test import getDepthFrame
 # import oak_d_test
 from collections import defaultdict
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import Ridge
+
+import matplotlib.pyplot as plt
+
+def getRowBase(midBase, col, angleStep, midCol = 287, HFOV = 71.9):
+    colDiff = np.abs(col - midCol)
+    return midBase / np.cos(colDiff * angleStep)
+
 
 if __name__ == '__main__':
     imgFrame = getDepthFrame()
     frame = imgFrame.getFrame()
-    # calibration 
+    # calibration
     timestamp = imgFrame.getTimestamp()
     print(timestamp)
-    frame = frame[:, 33:-33] # cut nonoverlapping area of binocular 
+    frame = frame[:, 33:-33] # cut nonoverlapping area of binocular
     # 400 x 574 corresponds to 65°, where valid values are within [350, 5520], ignore 0s
-    _, colNum = frame.shape
-    leftFrame, rightFrame = frame[:colNum//2], frame[:colNum//2:]
-    baseline = frame[colNum//2]
-    model = LinearRegression()
-    x = np.array([i for i in range(len(baseline))]).reshape(-1, 1)
-    line = model.fit(x, baseline)
-    pred = line.predict(x)
-    print(pred)
+    (rowNum, colNum) = frame.shape
+    leftFrame, rightFrame = frame[:colNum//2], frame[colNum//2:]
+    baseline = np.array(frame[:, colNum//2], dtype=float)
+    x = np.array(range(rowNum))[baseline != 0].reshape((-1, 1))
+    baseline = baseline[baseline != 0]
+    baseline = 1 / baseline
+    reg = Ridge().fit(x, baseline, np.array(range(len(x))) + 1)
+    pred = 1 / reg.predict(np.array(range(rowNum)))
+
+    angleStep = (71.9 / 640) * (np.pi / 180)
+    baseMat = np.empty_like(frame, dtype=float).transpose()
+    for i in range(colNum):
+        baseMat[i] = getRowBase(pred, i, angleStep)
+
+    plt.plot(1 / baseline)
+    plt.plot(pred)
+    plt.show()
     # the same baud rate as the one used on Arduino
     # ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
     # # clear what could be left in the buffer
@@ -38,12 +54,12 @@ if __name__ == '__main__':
     #         line = ser.readline().decode('utf-8').rstrip()
     #         if line == 'SystemOnline':
     #             break
-    
+
     # ser.write(b"activateSensor")
     # while True:
     #     if ser.in_waiting > 0:
     #         line = ser.readline().decode('utf-8').rstrip()
-    #         # data: <sensornum 1-6> <reading 0-500> 
+    #         # data: <sensornum 1-6> <reading 0-500>
     #         # msg: <debug msg>
     #         print(line)
     #         if line.startswith('data'):
@@ -56,12 +72,12 @@ if __name__ == '__main__':
     #             pass
     #         elif line.startswith('error'):
     #             print(line)
-        
-            
+
+
     #     # Rate “threat level” of each identified obstacle based on distance and speed
     #     # Activate vibration system accordingly
     #     # intensities = [0 for i in range(6)]
-        
+
     #     # modifyVibrator <num 1-6><level 1-3>
     #     # deactivateVibrator <num>
     #     # deactivateSensor
@@ -69,7 +85,7 @@ if __name__ == '__main__':
     #         if len(historical_readings[module_idx]) >= 1:
     #             print(historical_readings)
     #             current_reading = historical_readings[module_idx][-1]
-            
+
     #             last_reading = historical_readings[module_idx].pop(0)
     #             dx = current_reading - last_reading
     #             # 200ms between readings

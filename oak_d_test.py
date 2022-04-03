@@ -42,7 +42,7 @@ cfg = stereo.initialConfig.get()
 # cfg.postProcessing.speckleFilter.enable = True
 # cfg.postProcessing.spatialFilter.enable = True
 cfg.postProcessing.thresholdFilter.minRange = 349
-cfg.postProcessing.thresholdFilter.maxRange = 5758
+# cfg.postProcessing.thresholdFilter.maxRange = 5758
 stereo.initialConfig.set(cfg)
 
 sobelHorizontalKernel = [[1, 0, -1], [2, 0, -2], [1, 0, -1]]
