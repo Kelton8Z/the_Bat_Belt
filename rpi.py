@@ -13,13 +13,44 @@ def getRowBase(midBase, col, angleStep, midCol = 287, HFOV = 71.9):
     colDiff = np.abs(col - midCol)
     return midBase / np.cos(colDiff * angleStep)
 
+def vecToDict(vec):
+    d = {}
+    rowNum, colNum = vec.shape
+    firstBoundary = rowNum // 3
+    secondBoundary = 2*(rowNum//3)
 
-if __name__ == '__main__':
+    d['mid'] = vec[firstBoundary:secondBoundary]
+    d['top'] = vec[:firstBoundary]
+    d['bottom'] = vec[secondBoundary:]
+    return d
+
+def frameToDict(frame):
+    ground_level_readings = {}
+
+    rowNum, colNum = frame.shape
+    originalLeft = frame[:, :colNum//2]
+    originalRight = frame[:, colNum//2:]
+    rightVecDic = vecToDict(originalRight)
+    leftVecDic = vecToDict(originalLeft)
+    ground_level_readings["left"] = dict({"original" : originalLeft})
+    ground_level_readings["left"].update(leftVecDic)
+    ground_level_readings["right"] = dict({"original" : originalRight})
+    ground_level_readings["right"].update(rightVecDic)
+    return ground_level_readings
+
+def rateSubframe(ground_level_dict, baseMatDict):
+
+def rateAlertFromDepthCamera(ground_level_dict, baseMatDict):
+    right_level = rateSubframe(ground_level_dict['right'], baseMatDict['right'])
+    left_level = rateSubframe(ground_level_dict['left'], baseMatDict['left'])
+    return (left_level, right_level)
+
+if __name__ == '__main__':         
     imgFrame = getDepthFrame()
     frame = imgFrame.getFrame()
     # calibration
     timestamp = imgFrame.getTimestamp()
-    print(timestamp)
+    print(f'calibration time : {timestamp}')
     frame = frame[:, 33:-33] # cut nonoverlapping area of binocular
     # 400 x 574 corresponds to 65°, where valid values are within [350, 5520], ignore 0s
     (rowNum, colNum) = frame.shape
@@ -27,18 +58,33 @@ if __name__ == '__main__':
     baseline = np.array(frame[:, colNum//2], dtype=float)
     x = np.array(range(rowNum))[baseline != 0].reshape((-1, 1))
     baseline = baseline[baseline != 0]
-    baseline = 1 / baseline
-    reg = Ridge().fit(x, baseline, np.array(range(len(x))) + 1)
-    pred = 1 / reg.predict(np.array(range(rowNum)))
+    baseline_reciprocal = 1 / baseline
+    reg = Ridge().fit(x, baseline_reciprocal, np.array(range(len(x)))+1)
+    pred = 1 / reg.predict(np.array(range(rowNum)).reshape(-1, 1))
 
     angleStep = (71.9 / 640) * (np.pi / 180)
     baseMat = np.empty_like(frame, dtype=float).transpose()
     for i in range(colNum):
         baseMat[i] = getRowBase(pred, i, angleStep)
+    
 
-    plt.plot(1 / baseline)
-    plt.plot(pred)
-    plt.show()
+
+    # plt.plot(np.flip(baseline))
+    # plt.plot(np.flip(pred))
+    # plt.xlabel("pixels from near to far")
+    # plt.ylabel("depth (millimeter)")
+    baseMat = baseMat.transpose()
+    assert(baseMat.shape==(400, 574))
+    baseMatDict = vecToDict(frame)
+    while True:
+    # filming
+        frame = imgFrame.getFrame()
+        timestamp = imgFrame.getTimestamp()
+        frame = frame[:, 33:-33]
+        ground_level_Dict = frameToDict(frame)
+        
+        left_level, right_level = rateAlertFromDepthCamera(ground_level_Dict, baseMatDict)
+
     # the same baud rate as the one used on Arduino
     # ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
     # # clear what could be left in the buffer
