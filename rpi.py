@@ -15,8 +15,10 @@ def getRowBase(midBase, col, angleStep, midCol = 287, HFOV = 71.9):
 
 def vecToDict(vec):
     d = {}
-    rowNum, colNum = vec.shape
+    rowNum = vec.shape[0]
+    assert(rowNum==400)
     firstBoundary = rowNum // 3
+    assert(firstBoundary==133)
     secondBoundary = 2*(rowNum//3)
 
     d['mid'] = vec[firstBoundary:secondBoundary]
@@ -38,11 +40,34 @@ def frameToDict(frame):
     ground_level_readings["right"].update(rightVecDic)
     return ground_level_readings
 
-def rateSubframe(ground_level_dict, baseMatDict):
+def normalize(vals):
+    res = (np.mean(vals) - min(vals)) / (max(vals) - min(vals))
+    assert(res>0)
+    assert(res<1)
+    return res
+
+def rateSubframe(ground_level_dict, baselineDict):
+    '''
+        only the distance and not the speed matters for ground level obstacles
+        return alert levels of 0/1/2/3
+    '''
+    # vecSize = baseMatDict['top'].shape[0]
+    # assert(vecSize==400)
+    assert(ground_level_dict['top'].shape==(133,287))
+    top_diff = normalize(np.square(np.subtract(np.mean(ground_level_dict['top'], axis=1).T, baselineDict['top'].T)))
+    mid_diff = normalize(np.square(np.subtract(np.mean(ground_level_dict['mid'], axis=1).T, baselineDict['mid'].T)))
+    bottom_diff = normalize(np.square(np.subtract(np.mean(ground_level_dict['bottom'], axis=1).T, baselineDict['bottom'].T)))
+    level = (top_diff + 2*mid_diff + 3*bottom_diff)//6
+    print(top_diff)
+    print(mid_diff)
+    print(bottom_diff)
+    print(level)
+    assert(level in [0,1,2,3])
+    return level
 
 def rateAlertFromDepthCamera(ground_level_dict, baseMatDict):
-    right_level = rateSubframe(ground_level_dict['right'], baseMatDict['right'])
-    left_level = rateSubframe(ground_level_dict['left'], baseMatDict['left'])
+    right_level = rateSubframe(ground_level_dict['right'], baseMatDict)
+    left_level = rateSubframe(ground_level_dict['left'], baseMatDict)
     return (left_level, right_level)
 
 if __name__ == '__main__':         
@@ -63,19 +88,19 @@ if __name__ == '__main__':
     pred = 1 / reg.predict(np.array(range(rowNum)).reshape(-1, 1))
 
     angleStep = (71.9 / 640) * (np.pi / 180)
-    baseMat = np.empty_like(frame, dtype=float).transpose()
-    for i in range(colNum):
-        baseMat[i] = getRowBase(pred, i, angleStep)
-    
-
+    # baseMat = np.empty_like(frame, dtype=float).transpose()
+    # for i in range(colNum):
+    #     baseMat[i] = getRowBase(pred, i, angleStep)
 
     # plt.plot(np.flip(baseline))
     # plt.plot(np.flip(pred))
     # plt.xlabel("pixels from near to far")
     # plt.ylabel("depth (millimeter)")
-    baseMat = baseMat.transpose()
-    assert(baseMat.shape==(400, 574))
-    baseMatDict = vecToDict(frame)
+
+    # baseMat = baseMat.transpose()
+    # assert(baseMat.shape==(400, 574))
+    assert(pred.shape==(400,))
+    baselineDict = vecToDict(pred)
     while True:
     # filming
         frame = imgFrame.getFrame()
@@ -83,7 +108,7 @@ if __name__ == '__main__':
         frame = frame[:, 33:-33]
         ground_level_Dict = frameToDict(frame)
         
-        left_level, right_level = rateAlertFromDepthCamera(ground_level_Dict, baseMatDict)
+        left_level, right_level = rateAlertFromDepthCamera(ground_level_Dict, baselineDict)
 
     # the same baud rate as the one used on Arduino
     # ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
