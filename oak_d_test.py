@@ -64,10 +64,10 @@ stereoDepthQueue = device.getOutputQueue("stereoDepth", 8, False)
 trackedFeaturesQueue = device.getOutputQueue("trackedFeatures", 8, False)
 
 def getAugmentedFeature():
-    print("start getting features")
-    rgbFrame = rgbFrameQueue.get()
-    stereoFrame = stereoDepthQueue.get()
-    trackedFeatures = trackedFeaturesQueue.get()
+    print("start getting features") 
+    rgbFrame = rgbFrameQueue.get() # 1080 x 1280, use the first 720 rows 
+    stereoFrame = stereoDepthQueue.get() # 720 x 1280
+    trackedFeatures = trackedFeaturesQueue.get() # trackedFeatures.trackedFeatures gives a list of TrackedFeature objects with feature id, and position
     print(rgbFrame, stereoFrame, trackedFeatures)
     return (rgbFrame, stereoFrame, trackedFeatures)
     # latestPacket = {}
