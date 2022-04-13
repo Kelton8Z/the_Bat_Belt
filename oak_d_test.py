@@ -1,72 +1,81 @@
-# first, import all necessary modules
-from pathlib import Path
-
-import blobconverter
 import cv2
 import depthai as dai
-import numpy as np
 
-# Closer-in minimum depth, disparity range is doubled (from 95 to 190):
-extended_disparity = True
-# Better accuracy for longer distance, fractional disparity 32-levels:
-subpixel = False
-# Better handling for occlusions:
-lr_check = True
-
-frame = None
-detections = []
-
+# Create pipeline
 pipeline = dai.Pipeline()
 
+# Define sources and outputs
+camRgb = pipeline.create(dai.node.ColorCamera)
 monoLeft = pipeline.create(dai.node.MonoCamera)
 monoRight = pipeline.create(dai.node.MonoCamera)
 stereo = pipeline.create(dai.node.StereoDepth)
-edgeDetector = pipeline.create(dai.node.EdgeDetector)
-edgeOut = pipeline.create(dai.node.XLinkOut)
-depthOut = pipeline.create(dai.node.XLinkOut)
+featureTracker = pipeline.create(dai.node.FeatureTracker)
+
+xoutRgbFrame = pipeline.create(dai.node.XLinkOut)
+xoutStereoDepth = pipeline.create(dai.node.XLinkOut)
+xoutTrackedFeatures = pipeline.create(dai.node.XLinkOut)
+
+xoutRgbFrame.setStreamName("rgbFrame")
+xoutStereoDepth.setStreamName("stereoDepth")
+xoutTrackedFeatures.setStreamName("trackedFeatures")
 
 # Properties
-monoLeft.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
+camRgb.setBoardSocket(dai.CameraBoardSocket.RGB)
+camRgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
+camRgb.setIspScale(2, 3) # downscale to 720P
+camRgb.setFps(30)
+
+monoLeft.setResolution(dai.MonoCameraProperties.SensorResolution.THE_720_P)
 monoLeft.setBoardSocket(dai.CameraBoardSocket.LEFT)
-monoRight.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
+monoLeft.setFps(30)
+monoRight.setResolution(dai.MonoCameraProperties.SensorResolution.THE_720_P)
 monoRight.setBoardSocket(dai.CameraBoardSocket.RIGHT)
+monoRight.setFps(30)
 
 stereo.setDefaultProfilePreset(dai.node.StereoDepth.PresetMode.HIGH_DENSITY)
 # Options: MEDIAN_OFF, KERNEL_3x3, KERNEL_5x5, KERNEL_7x7 (default)
 stereo.initialConfig.setMedianFilter(dai.MedianFilter.KERNEL_7x7)
-stereo.setLeftRightCheck(lr_check)
-stereo.setExtendedDisparity(extended_disparity)
-stereo.setSubpixel(subpixel)
-
+stereo.setLeftRightCheck(True)
+stereo.setExtendedDisparity(True)
+stereo.setDepthAlign(dai.CameraBoardSocket.RGB)
 cfg = stereo.initialConfig.get()
-# cfg.postProcessing.speckleFilter.enable = True
-# cfg.postProcessing.spatialFilter.enable = True
 cfg.postProcessing.thresholdFilter.minRange = 349
-# cfg.postProcessing.thresholdFilter.maxRange = 5758
 stereo.initialConfig.set(cfg)
 
-sobelHorizontalKernel = [[1, 0, -1], [2, 0, -2], [1, 0, -1]]
-sobelVerticalKernel = [[1, 2, 1], [0, 0, 0], [-1, -2, -1]]
-edgeDetector.initialConfig.setSobelFilterKernels(sobelHorizontalKernel, sobelVerticalKernel)
-
-edgeOut.setStreamName("edge")
-depthOut.setStreamName("depth")
+numShaves = 2
+numMemorySlices = 2
+featureTracker.setHardwareResources(numShaves, numMemorySlices)
 
 # Linking
+camRgb.isp.link(featureTracker.inputImage)
+camRgb.isp.link(xoutRgbFrame.input)
+featureTracker.passthroughInputImage.link(xoutRgbFrame.input)
+featureTracker.outputFeatures.link(xoutTrackedFeatures.input)
+
 monoLeft.out.link(stereo.left)
 monoRight.out.link(stereo.right)
-stereo.disparity.link(edgeDetector.inputImage)
-edgeDetector.outputImage.link(edgeOut.input)
-stereo.depth.link(depthOut.input)
+stereo.depth.link(xoutStereoDepth.input)
 
+# Connect to device and start pipeline
 device = dai.Device(pipeline)
-# Output/input queues
-edgeQueue = device.getOutputQueue(name="edge", maxSize=4, blocking=False)
-depthQueue = device.getOutputQueue(name="depth", maxSize=4, blocking=False)
 
-def getDepthFrame():
-    return depthQueue.get()
+rgbFrameQueue = device.getOutputQueue("rgbFrame", 8, False)
+stereoDepthQueue = device.getOutputQueue("stereoDepth", 8, False)
+trackedFeaturesQueue = device.getOutputQueue("trackedFeatures", 8, False)
 
-def getEdgeFrame():
-    return edgeQueue.get().getFrame()
+def getAugmentedFeature():
+    print("start getting features")
+    rgbFrame = rgbFrameQueue.get()
+    stereoFrame = stereoDepthQueue.get()
+    trackedFeatures = trackedFeaturesQueue.get()
+    print(rgbFrame, stereoFrame, trackedFeatures)
+    return (rgbFrame, stereoFrame, trackedFeatures)
+    # latestPacket = {}
+    # queueEvents = device.getQueueEvents(("rgbFrame", "trackedFeatures"))
+    # for queueName in queueEvents:
+    #     print(queueName)
+    #     packets = device.getOutputQueue(queueName).tryGetAll()
+    #     if len(packets) > 0:
+    #         latestPacket[queueName] = packets[-1]
+    # return latestPacket
 
