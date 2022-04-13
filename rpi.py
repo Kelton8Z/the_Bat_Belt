@@ -2,12 +2,34 @@
 # import serial
 import cv2
 import numpy as np
-from oak_d_test import getDepthFrame
+from oak_d_test import getAugmentedFeature
 # import oak_d_test
 from collections import defaultdict
 from sklearn.linear_model import Ridge
 
 import matplotlib.pyplot as plt
+
+import numpy as np
+
+def ​getDepthThreshold():
+    BL = 75 #mm
+    HFOV = 72 #deg
+    Dv = (BL / 2) * np.tan((90 - HFOV / 2) * np.pi / 180)
+    W = 1280 #720p
+    D = np.empty(W)
+    numerator = W * Dv
+    for B in range(W // 2):
+        D[B] = numerator / B
+        D[-(B + 1)] = D[B]
+    return D
+    
+def filterInvalidDepth(stereoFrame, D):
+    row, col = stereoFrame.shape
+    for i in range(row):
+        for j in range(col):
+            stereoFrame[i][j] = 0 if stereoFrame[i][j] < D[j]
+
+    return stereoFrame
 
 def getRowBase(midBase, col, angleStep, midCol = 287, HFOV = 71.9):
     colDiff = np.abs(col - midCol)
@@ -71,15 +93,17 @@ def rateAlertFromDepthCamera(ground_level_dict, baseMatDict):
     return (left_level, right_level)
 
 if __name__ == '__main__':         
-    imgFrame = getDepthFrame()
-    frame = imgFrame.getFrame()
+    rgbFrame, stereoFrame, trackedFeatures = getAugmentedFeature()
+    rgbFrame, stereoFrame = rgbFrame.getFrame()[:720], stereoFrame.getFrame()
+    # trackedFeatures = trackedFeatures.trackedFeatures
     # calibration
-    timestamp = imgFrame.getTimestamp()
+    timestamp = stereoFrame.getTimestamp()
     print(f'calibration time : {timestamp}')
-    frame = frame[:, 33:-33] # cut nonoverlapping area of binocular
-    # 400 x 574 corresponds to 65°, where valid values are within [350, 5520], ignore 0s
-    (rowNum, colNum) = frame.shape
-    leftFrame, rightFrame = frame[:colNum//2], frame[colNum//2:]
+    # 720 x 1280, where valid values are within [350, 5520], ignore 0s
+    (rowNum, colNum) = stereoFrame.shape
+    D = ​getDepthThreshold()
+    stereoFrame = filterInvalidDepth(stereoFrame, D)
+    leftFrame, rightFrame = stereoFrame[:colNum//2], stereoFrame[colNum//2:]
     baseline = np.array(frame[:, colNum//2], dtype=float)
     x = np.array(range(rowNum))[baseline != 0].reshape((-1, 1))
     baseline = baseline[baseline != 0]
@@ -103,9 +127,10 @@ if __name__ == '__main__':
     baselineDict = vecToDict(pred)
     while True:
     # filming
-        frame = imgFrame.getFrame()
-        timestamp = imgFrame.getTimestamp()
-        frame = frame[:, 33:-33]
+        rgbFrame, stereoFrame, trackedFeatures = getAugmentedFeature()
+        rgbFrame, stereoFrame = rgbFrame.getFrame()[:720], stereoFrame.getFrame()
+        trackedFeatures = trackedFeatures.trackedFeatures
+
         ground_level_Dict = frameToDict(frame)
         
         left_level, right_level = rateAlertFromDepthCamera(ground_level_Dict, baselineDict)
