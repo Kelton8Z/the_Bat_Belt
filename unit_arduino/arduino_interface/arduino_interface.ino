@@ -1,4 +1,4 @@
-// ---------------------------------------------------------------- //
+     // ---------------------------------------------------------------- //
 // Arduino Ultrasoninc Sensor HC-SR04
 // Re-writed by Arbi Abdul Jabbaar
 // Using Arduino IDE 1.8.7
@@ -28,6 +28,8 @@ int vibStatus[6] = {0, 0, 0, 0, 0, 0};
 long duration; // variable for the duration of sound wave travel
 int distance; // variable for the distance measurement
 
+int sensorDist[6] = {0, 0, 0, 0, 0, 0};
+
 
 
 bool activeSensor = false;
@@ -36,7 +38,7 @@ bool vibChanged = false;
 
 void setup() {
   // set operating mode for all 18 pins
-  for (int i = 0; i < 6; i++) {
+  for (int i = 0; i < NUM_SENSOR; i++) {
     pinMode(trigPin[i], OUTPUT);
     pinMode(echoPin[i], INPUT);
     pinMode(vibPin[i], OUTPUT);
@@ -57,7 +59,8 @@ void loop() {
     String myStr = String(token);
     if (myStr == "activateSensor") {
       activeSensor = true;
-      Serial.println("MSG: Sensors have been activated");
+      currentSensor = 0; // reset sensor pointer
+      Serial.println("MSG: Sensors have been activated fresh");
     } else if (myStr == "deactivateSensor") {
       activeSensor = false;
       Serial.println("MSG: Sensors have been deactivated");
@@ -108,7 +111,7 @@ void loop() {
 
   // In a loop, check all status of vibration pins
   if (vibChanged) {
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < NUM_SENSOR; i++) {
       // Comeback to this to check vibration levels
       analogWrite(vibPin[i], vibStatus[i] * 50);
     }
@@ -124,21 +127,27 @@ void loop() {
   if ( activeSensor ) {
     // Clears the corresponding trigPin condition
     digitalWrite(trigPin[currentSensor], LOW);
-    delay(300);
+    delay(2);
     // Sets the trigPin HIGH (ACTIVE) for 10 microseconds
     digitalWrite(trigPin[currentSensor], HIGH);
     delay(10);
     digitalWrite(trigPin[currentSensor], LOW);
     // Reads the echoPin, returns the sound wave travel time in microseconds
-    duration = pulseIn(echoPin[currentSensor], HIGH);
+    duration = pulseIn(echoPin[currentSensor], HIGH, 30000);
     // Calculating the distance
     distance = duration * 0.034 / 2; // Speed of sound wave divided by 2 (go and back)
     // Displays the distance on the Serial Monitor
-    Serial.print("data: ");
-    Serial.print(currentSensor + 1);
-    Serial.print(" ");
-    Serial.println(distance);
+    sensorDist[currentSensor] = distance;
     currentSensor = currentSensor + 1;
-    currentSensor = currentSensor % 2;
+    currentSensor = currentSensor % NUM_SENSOR;
+    if (currentSensor == 0) {
+      Serial.print("data: ");
+      Serial.print(" ");
+      for (int i = 0; i < NUM_SENSOR; i++){
+        Serial.print(sensorDist[i]);
+        Serial.print(" ");
+      }
+      Serial.println("");
+    }
   }
 }
