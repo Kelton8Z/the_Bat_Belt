@@ -151,23 +151,23 @@ if __name__ == '__main__':
     #         if line == 'SystemOnline':
     #             break
 
-    # ser.write(b"activateSensor")
-    # while True:
-    #     if ser.in_waiting > 0:
-    #         line = ser.readline().decode('utf-8').rstrip()
-    #         # data: <sensornum 1-6> <reading 0-500>
-    #         # msg: <debug msg>
-    #         print(line)
-    #         if line.startswith('data'):
-    #             _, module_idx, sensor_reading = line.split(' ')
-    #             module_idx = int(module_idx)
-    #             sensor_reading = int(sensor_reading)
-    #             module_indices.append(module_idx)
-    #             historical_readings[module_idx].append(sensor_reading)
-    #         elif line.startswith('msg'):
-    #             pass
-    #         elif line.startswith('error'):
-    #             print(line)
+    ser.write(b"activateSensor")
+    while True:
+        if ser.in_waiting > 0:
+            line = ser.readline().decode('utf-8').rstrip()
+            # data: <reading 0-500> x6
+            # msg: <debug msg>
+            print(line)
+            if line.startswith('data'):
+                _, sensor_readings = line.split(' ')
+                for module_idx, sensor_reading in enumerate(sensor_readings):
+                    sensor_reading = int(sensor_reading)
+#                     module_indices.append(module_idx)
+                    historical_readings[module_idx].append(sensor_reading)
+            elif line.startswith('msg'):
+                pass
+            elif line.startswith('error'):
+                print(line)
 
 
     #     # Rate “threat level” of each identified obstacle based on distance and speed
