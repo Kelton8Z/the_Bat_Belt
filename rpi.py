@@ -101,7 +101,7 @@ if __name__ == '__main__':
     print(f'calibration time : {timestamp}')
     # 720 x 1280, where valid values are within [350, 5520], ignore 0s
     (rowNum, colNum) = stereoFrame.shape
-    D = ​getDepthThreshold()
+    D = getDepthThreshold()
     stereoFrame = filterInvalidDepth(stereoFrame, D)
     leftFrame, rightFrame = stereoFrame[:colNum//2], stereoFrame[colNum//2:]
     baseline = np.array(frame[:, colNum//2], dtype=float)
@@ -112,9 +112,9 @@ if __name__ == '__main__':
     pred = 1 / reg.predict(np.array(range(rowNum)).reshape(-1, 1))
 
     angleStep = (71.9 / 640) * (np.pi / 180)
-    # baseMat = np.empty_like(frame, dtype=float).transpose()
-    # for i in range(colNum):
-    #     baseMat[i] = getRowBase(pred, i, angleStep)
+    baseMat = np.empty_like(stereoFrame, dtype=float).transpose()
+    for i in range(colNum):
+        baseMat[i] = getRowBase(pred, i, angleStep)
 
     # plt.plot(np.flip(baseline))
     # plt.plot(np.flip(pred))
@@ -125,12 +125,19 @@ if __name__ == '__main__':
     # assert(baseMat.shape==(400, 574))
     assert(pred.shape==(400,))
     baselineDict = vecToDict(pred)
+    feature_IDs = set()
     while True:
     # filming
         rgbFrame, stereoFrame, trackedFeatures = getAugmentedFeature()
         rgbFrame, stereoFrame = rgbFrame.getFrame()[:720], stereoFrame.getFrame()
         trackedFeatures = trackedFeatures.trackedFeatures
-
+        errors = []
+        for trackedFeature in trackedFeatures:
+            x, y = trackedFeature.position 
+            feature_IDs.add(trackedFeature.id)
+            error = (stereoFrame[x][y] - baseMat[x][y])**2
+            errors.append(error)
+        np.mean(np.array(errors))
         ground_level_Dict = frameToDict(frame)
         
         left_level, right_level = rateAlertFromDepthCamera(ground_level_Dict, baselineDict)
