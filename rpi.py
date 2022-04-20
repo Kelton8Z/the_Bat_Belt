@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 
-def ​getDepthThreshold():
+def getDepthThreshold():
     BL = 75 #mm
     HFOV = 72 #deg
     Dv = (BL / 2) * np.tan((90 - HFOV / 2) * np.pi / 180)
@@ -27,8 +27,8 @@ def filterInvalidDepth(stereoFrame, D):
     row, col = stereoFrame.shape
     for i in range(row):
         for j in range(col):
-            stereoFrame[i][j] = 0 if stereoFrame[i][j] < D[j]
-
+            if stereoFrame[i][j] < D[j]:
+                stereoFrame[i][j] = 0 
     return stereoFrame
 
 def getRowBase(midBase, col, angleStep, midCol = 287, HFOV = 71.9):
@@ -94,27 +94,27 @@ def rateAlertFromDepthCamera(ground_level_dict, baseMatDict):
 
 if __name__ == '__main__':         
     rgbFrame, stereoFrame, trackedFeatures = getAugmentedFeature()
+    timestamp = stereoFrame.getTimestamp()
     rgbFrame, stereoFrame = rgbFrame.getFrame()[:720], stereoFrame.getFrame()
     # trackedFeatures = trackedFeatures.trackedFeatures
     # calibration
-    timestamp = stereoFrame.getTimestamp()
     print(f'calibration time : {timestamp}')
     # 720 x 1280, where valid values are within [350, 5520], ignore 0s
     (rowNum, colNum) = stereoFrame.shape
     D = getDepthThreshold()
     stereoFrame = filterInvalidDepth(stereoFrame, D)
     leftFrame, rightFrame = stereoFrame[:colNum//2], stereoFrame[colNum//2:]
-    baseline = np.array(frame[:, colNum//2], dtype=float)
+    baseline = np.array(stereoFrame[:, colNum//2], dtype=float)
     x = np.array(range(rowNum))[baseline != 0].reshape((-1, 1))
-    baseline = baseline[baseline != 0]
+    #baseline = baseline[baseline != 0]
     baseline_reciprocal = 1 / baseline
-    reg = Ridge().fit(x, baseline_reciprocal, np.array(range(len(x)))+1)
-    pred = 1 / reg.predict(np.array(range(rowNum)).reshape(-1, 1))
+    #reg = Ridge().fit(x, baseline_reciprocal, np.array(range(len(x)))+1)
+    #pred = 1 / reg.predict(np.array(range(rowNum)).reshape(-1, 1))
 
     angleStep = (71.9 / 640) * (np.pi / 180)
     baseMat = np.empty_like(stereoFrame, dtype=float).transpose()
     for i in range(colNum):
-        baseMat[i] = getRowBase(pred, i, angleStep)
+        baseMat[i] = baseline # getRowBase(pred, i, angleStep)
 
     # plt.plot(np.flip(baseline))
     # plt.plot(np.flip(pred))
@@ -123,8 +123,8 @@ if __name__ == '__main__':
 
     # baseMat = baseMat.transpose()
     # assert(baseMat.shape==(400, 574))
-    assert(pred.shape==(400,))
-    baselineDict = vecToDict(pred)
+    #assert(pred.shape==(400,))
+    #baselineDict = vecToDict(pred)
     feature_IDs = set()
     while True:
     # filming
@@ -133,7 +133,7 @@ if __name__ == '__main__':
         trackedFeatures = trackedFeatures.trackedFeatures
         errors = []
         for trackedFeature in trackedFeatures:
-            x, y = trackedFeature.position 
+            x, y = int(trackedFeature.position.x), int(trackedFeature.position.y)  
             feature_IDs.add(trackedFeature.id)
             error = (stereoFrame[x][y] - baseMat[x][y])**2
             errors.append(error)
