@@ -38,9 +38,10 @@ def getRowBase(midBase, col, angleStep, midCol = 287, HFOV = 71.9):
 def vecToDict(vec):
     d = {}
     rowNum = vec.shape[0]
-    assert(rowNum==400)
+    print(rowNum) 
+    assert(rowNum==720)
     firstBoundary = rowNum // 3
-    assert(firstBoundary==133)
+    assert(firstBoundary==240)
     secondBoundary = 2*(rowNum//3)
 
     d['mid'] = vec[firstBoundary:secondBoundary]
@@ -62,34 +63,85 @@ def frameToDict(frame):
     ground_level_readings["right"].update(rightVecDic)
     return ground_level_readings
 
+
 def normalize(vals):
     res = (np.mean(vals) - min(vals)) / (max(vals) - min(vals))
-    assert(res>0)
+    assert(res>=0)
     assert(res<1)
     return res
 
-def rateSubframe(ground_level_dict, baselineDict):
+
+def rateSubframe(ground_level, baseMat, features):
     '''
         only the distance and not the speed matters for ground level obstacles
         return alert levels of 0/1/2/3
     '''
     # vecSize = baseMatDict['top'].shape[0]
     # assert(vecSize==400)
-    assert(ground_level_dict['top'].shape==(133,287))
-    top_diff = normalize(np.square(np.subtract(np.mean(ground_level_dict['top'], axis=1).T, baselineDict['top'].T)))
-    mid_diff = normalize(np.square(np.subtract(np.mean(ground_level_dict['mid'], axis=1).T, baselineDict['mid'].T)))
-    bottom_diff = normalize(np.square(np.subtract(np.mean(ground_level_dict['bottom'], axis=1).T, baselineDict['bottom'].T)))
-    level = (top_diff + 2*mid_diff + 3*bottom_diff)//6
+    #assert(ground_level_dict['top'].shape==(240, 427))
+
+    #top_diff = normalize(np.square(np.subtract(np.mean(ground_level_dict['top'], axis=1).T, baselineDict['top'].T)))
+    #mid_diff = normalize(np.square(np.subtract(np.mean(ground_level_dict['mid'], axis=1).T, baselineDict['mid'].T)))
+    #bottom_diff = normalize(np.square(np.subtract(np.mean(ground_level_dict['bottom'], axis=1).T, baselineDict['bottom'].T)))
+    rowNum = ground_level.shape[0]
+    # print(rowNum) 
+    assert(rowNum==720)
+    firstBoundary = rowNum // 3
+    assert(firstBoundary==240)
+    secondBoundary = 2*firstBoundary
+
+    top_diffs = []
+    mid_diffs = []
+    bottom_diffs = []
+
+    for feature in features:
+        x, y = int(feature.position.x), int(feature.position.y)
+        feature_IDs.add(feature.id)
+        if x < 420:
+            error = (stereoFrame[x][y] - baseMat[x][y])**2
+            if y < firstBoundary:
+                top_diffs.append(error)
+            elif y > secondBoundary:
+                bottom_diffs.append(error)
+            else:
+                mid_diffs.append(error)
+
+    top_diff = np.mean(np.array(top_diffs))
+    mid_diff = np.mean(np.array(mid_diffs))
+    bottom_diff = np.mean(np.array(bottom_diffs))
+
+
+    top_score = 0
+    mid_score = 0
+    bottom_score = 0
+    if top_diffs:
+        top_score = normalize(top_diffs)
+    if mid_diffs:
+        mid_score = normalize(mid_diffs) 
+    if bottom_diffs:
+        bottom_score = normalize(bottom_diffs)
+
+    level = (top_score + 2*mid_score + 3*bottom_score)//6
     print(top_diff)
     print(mid_diff)
     print(bottom_diff)
-    print(level)
+    #print(level)
     assert(level in [0,1,2,3])
     return level
 
-def rateAlertFromDepthCamera(ground_level_dict, baseMatDict):
-    right_level = rateSubframe(ground_level_dict['right'], baseMatDict)
-    left_level = rateSubframe(ground_level_dict['left'], baseMatDict)
+def rateAlertFromDepthCamera(ground_level, baseMat, trackedFeatures):
+    rightFeatures = []
+    leftFeatures = []
+    for trackedFeature in trackedFeatures:
+        y, x = int(trackedFeature.position.y), int(trackedFeature.position.x) 
+        if x < 720:
+            if y > 640: # right
+                rightFeatures.append(trackedFeature)
+            else:
+                leftFeatures.append(trackedFeature)
+
+    right_level = rateSubframe(ground_level, baseMat, leftFeatures)
+    left_level = rateSubframe(ground_level, baseMat, rightFeatures)
     return (left_level, right_level)
 
 if __name__ == '__main__':         
@@ -132,15 +184,12 @@ if __name__ == '__main__':
         rgbFrame, stereoFrame = rgbFrame.getFrame()[:720], stereoFrame.getFrame()
         trackedFeatures = trackedFeatures.trackedFeatures
         errors = []
-        for trackedFeature in trackedFeatures:
-            x, y = int(trackedFeature.position.x), int(trackedFeature.position.y)  
-            feature_IDs.add(trackedFeature.id)
-            error = (stereoFrame[x][y] - baseMat[x][y])**2
-            errors.append(error)
-        np.mean(np.array(errors))
-        ground_level_Dict = frameToDict(frame)
-        
-        left_level, right_level = rateAlertFromDepthCamera(ground_level_Dict, baselineDict)
+        #frame = np.zeros(stereoFrame.shape)
+        #ground_level_Dict = frameToDict(stereoFrame)
+        ground_level = stereoFrame
+        left_level, right_level = rateAlertFromDepthCamera(ground_level, baseMat, trackedFeatures)
+        print(f'left level {left_level}')
+        print(f'right level {right_level}')
 
     # the same baud rate as the one used on Arduino
     # ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
