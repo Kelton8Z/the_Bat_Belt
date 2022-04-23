@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 
+FRAME_THRESHOLD = 640 #
+
 def getDepthThreshold():
     BL = 75 #mm
     HFOV = 72 #deg
@@ -19,26 +21,26 @@ def getDepthThreshold():
     D = np.empty(W)
     numerator = W * Dv
     for B in range(W // 2):
-        D[B] = numerator / B
+        D[B] = numerator / (B+0.5)
         D[-(B + 1)] = D[B]
     return D
-    
+
 def filterInvalidDepth(stereoFrame, D):
     row, col = stereoFrame.shape
     for i in range(row):
         for j in range(col):
             if stereoFrame[i][j] < D[j]:
-                stereoFrame[i][j] = 0 
+                stereoFrame[i][j] = 0
     return stereoFrame
 
-def getRowBase(midBase, col, angleStep, midCol = 287, HFOV = 71.9):
+def getRowBase(midBase, col, angleStep, midCol = 640, HFOV = 71.9):
     colDiff = np.abs(col - midCol)
     return midBase / np.cos(colDiff * angleStep)
 
 def vecToDict(vec):
     d = {}
     rowNum = vec.shape[0]
-    print(rowNum) 
+    print(rowNum)
     assert(rowNum==720)
     firstBoundary = rowNum // 3
     assert(firstBoundary==240)
@@ -84,7 +86,7 @@ def rateSubframe(ground_level, baseMat, features):
     #mid_diff = normalize(np.square(np.subtract(np.mean(ground_level_dict['mid'], axis=1).T, baselineDict['mid'].T)))
     #bottom_diff = normalize(np.square(np.subtract(np.mean(ground_level_dict['bottom'], axis=1).T, baselineDict['bottom'].T)))
     rowNum = ground_level.shape[0]
-    # print(rowNum) 
+    # print(rowNum)
     assert(rowNum==720)
     firstBoundary = rowNum // 3
     assert(firstBoundary==240)
@@ -115,11 +117,11 @@ def rateSubframe(ground_level, baseMat, features):
     mid_score = 0
     bottom_score = 0
     if top_diffs:
-        top_score = normalize(top_diffs)
+        top_score = 1/(1+np.exp(-top_diff))
     if mid_diffs:
-        mid_score = normalize(mid_diffs) 
+        mid_score = 1/(1+np.exp(-mid_diff))
     if bottom_diffs:
-        bottom_score = normalize(bottom_diffs)
+        bottom_score = 1/(1+np.exp(-bottom_diff))
 
     level = (top_score + 2*mid_score + 3*bottom_score)//6
     print(top_diff)
@@ -133,9 +135,9 @@ def rateAlertFromDepthCamera(ground_level, baseMat, trackedFeatures):
     rightFeatures = []
     leftFeatures = []
     for trackedFeature in trackedFeatures:
-        y, x = int(trackedFeature.position.y), int(trackedFeature.position.x) 
-        if x < 720:
-            if y > 640: # right
+        y, x = int(trackedFeature.position.y), int(trackedFeature.position.x)
+        if y < 720:
+            if x > 640: # right
                 rightFeatures.append(trackedFeature)
             else:
                 leftFeatures.append(trackedFeature)
@@ -144,7 +146,7 @@ def rateAlertFromDepthCamera(ground_level, baseMat, trackedFeatures):
     left_level = rateSubframe(ground_level, baseMat, rightFeatures)
     return (left_level, right_level)
 
-if __name__ == '__main__':         
+if __name__ == '__main__':
     rgbFrame, stereoFrame, trackedFeatures = getAugmentedFeature()
     timestamp = stereoFrame.getTimestamp()
     rgbFrame, stereoFrame = rgbFrame.getFrame()[:720], stereoFrame.getFrame()
@@ -158,15 +160,15 @@ if __name__ == '__main__':
     leftFrame, rightFrame = stereoFrame[:colNum//2], stereoFrame[colNum//2:]
     baseline = np.array(stereoFrame[:, colNum//2], dtype=float)
     x = np.array(range(rowNum))[baseline != 0].reshape((-1, 1))
-    #baseline = baseline[baseline != 0]
+    baseline = baseline[baseline != 0]
     baseline_reciprocal = 1 / baseline
-    #reg = Ridge().fit(x, baseline_reciprocal, np.array(range(len(x)))+1)
-    #pred = 1 / reg.predict(np.array(range(rowNum)).reshape(-1, 1))
+    reg = Ridge().fit(x, baseline_reciprocal, np.array(range(len(x)))+1)
+    pred = 1 / reg.predict(np.array(range(rowNum)).reshape(-1, 1))
 
     angleStep = (71.9 / 640) * (np.pi / 180)
     baseMat = np.empty_like(stereoFrame, dtype=float).transpose()
     for i in range(colNum):
-        baseMat[i] = baseline # getRowBase(pred, i, angleStep)
+        baseMat[i] = getRowBase(pred, i, angleStep)
 
     # plt.plot(np.flip(baseline))
     # plt.plot(np.flip(pred))
