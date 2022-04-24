@@ -10,8 +10,16 @@ from sklearn.linear_model import Ridge
 import matplotlib.pyplot as plt
 
 import numpy as np
+import pyttsx3
+FRAME_THRESHOLD = 640
 
-FRAME_THRESHOLD = 640 #
+james = pyttsx3.init()
+def james_speak(content):
+    james.say(content)
+    james.runAndWait()
+    print(content)
+
+
 
 def getDepthThreshold():
     BL = 75 #mm
@@ -188,11 +196,25 @@ def rateAlertFromDepthCamera(ground_level, baseMat, trackedFeatures):
 if __name__ == '__main__':
     '''
     import bluetooth
+    target_name = "KeltonAirPods"
+    target_addr = None
+    devices = bluetooth.discover_devices()
+    for bdaddr in nearby_devices:
+    if target_name == bluetooth.lookup_name( bdaddr ):
+        target_address = bdaddr
+        break
+
+    if target_address is not None:
+        print "found target bluetooth device with address ", target_address
+    else:
+        print "could not find target bluetooth device nearby"
     bd_addr =
     port =
     sock = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
     sock.connect(bd_addr, port)
     sock.send('\x1A')'''
+    james_speak('alex dumb')
+
     rgbFrame, stereoFrame, trackedFeatures = getAugmentedFeature()
     timestamp = stereoFrame.getTimestamp()
     rgbFrame, stereoFrame = rgbFrame.getFrame()[:720], stereoFrame.getFrame()
