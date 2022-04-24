@@ -88,6 +88,7 @@ def rateSubframe(ground_level, baseMat, features):
     rowNum = ground_level.shape[0]
     # print(rowNum)
     assert(rowNum==720)
+    '''
     firstBoundary = rowNum // 3
     assert(firstBoundary==240)
     secondBoundary = 2*firstBoundary
@@ -126,10 +127,48 @@ def rateSubframe(ground_level, baseMat, features):
     level = (top_score + 2*mid_score + 3*bottom_score)//6
     print(top_diff)
     print(mid_diff)
-    print(bottom_diff)
+    print(bottom_diff)'''
     #print(level)
+    divided = ground_level.transpose() / baseMat
+    #divided = (divided * 255).astype(np.uint8)
+    num_of_pixel = 50000
+    height_threshold = 0.95
+    zero_num = np.sum(np.sign(-ground_level + 1))
+    within_1_num = np.sum(np.sign(np.maximum(1000-ground_level, np.zeros(1280)))) - zero_num
+    within_2_num = np.sum(np.sign(np.maximum(2000-ground_level, np.zeros(1280)))) - within_1_num
+    within_4pt5_num = np.sum(np.sign(np.maximum(4500-ground_level, np.zeros(1280)))) - within_2_num - within_1_num
+    zero_frame = np.sign(-ground_level) + 1
+    lv3_frame = np.zeros_like(ground_level)
+    lv3_frame[ground_level < 1000] = 1
+    lv2_frame = np.zeros_like(ground_level)
+    lv2_frame[ground_level < 2000] = 1
+    lv1_frame = np.zeros_like(ground_level)
+    lv1_frame[ground_level < 4500] = 1
+    sum_frame = lv1_frame + lv2_frame + lv3_frame
+    sum_frame[zero_frame == 1] = 0
+    print(ground_level)
+    print(sum_frame)
+    plt.figure()
+    _, axarr = plt.subplots(2, 3)
+    axarr[0,0].imshow(ground_level)
+    axarr[0,1].imshow(zero_frame)
+    axarr[0,2].imshow(lv3_frame)
+    axarr[1,0].imshow(lv2_frame)
+    axarr[1,1].imshow(lv1_frame)
+    axarr[1,2].imshow(sum_frame)
+    plt.show()
+    sys.exit()
+    if within_1_num > num_of_pixel:
+        return 3
+    if within_2_num > num_of_pixel:
+        return 2
+    if within_4pt5_num > num_of_pixel:
+        return 1
+    return 0
+
+    '''
     assert(level in [0,1,2,3])
-    return level
+    return level'''
 
 def rateAlertFromDepthCamera(ground_level, baseMat, trackedFeatures):
     rightFeatures = []
@@ -147,12 +186,18 @@ def rateAlertFromDepthCamera(ground_level, baseMat, trackedFeatures):
     return (left_level, right_level)
 
 if __name__ == '__main__':
+    '''
+    import bluetooth
+    bd_addr =
+    port =
+    sock = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
+    sock.connect(bd_addr, port)
+    sock.send('\x1A')'''
     rgbFrame, stereoFrame, trackedFeatures = getAugmentedFeature()
     timestamp = stereoFrame.getTimestamp()
     rgbFrame, stereoFrame = rgbFrame.getFrame()[:720], stereoFrame.getFrame()
     # trackedFeatures = trackedFeatures.trackedFeatures
     # calibration
-    print(f'calibration time : {timestamp}')
     # 720 x 1280, where valid values are within [350, 5520], ignore 0s
     (rowNum, colNum) = stereoFrame.shape
     D = getDepthThreshold()
@@ -169,7 +214,7 @@ if __name__ == '__main__':
     baseMat = np.empty_like(stereoFrame, dtype=float).transpose()
     for i in range(colNum):
         baseMat[i] = getRowBase(pred, i, angleStep)
-
+    print(f'calibration time : {timestamp}')
     # plt.plot(np.flip(baseline))
     # plt.plot(np.flip(pred))
     # plt.xlabel("pixels from near to far")
