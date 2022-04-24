@@ -130,22 +130,24 @@ def rateSubframe(ground_level, baseMat, features):
     print(bottom_diff)'''
     #print(level)
     divided = ground_level.transpose() / baseMat
-    #divided = (divided * 255).astype(np.uint8)
-    num_of_pixel = 50000
     height_threshold = 0.95
+    height_frame = np.zeros_like(divided)
+    height_frame[divided > height_threshold] = 1
+
+    num_of_pixel = 50000
     zero_num = np.sum(np.sign(-ground_level + 1))
-    within_1_num = np.sum(np.sign(np.maximum(1000-ground_level, np.zeros(1280)))) - zero_num
-    within_2_num = np.sum(np.sign(np.maximum(2000-ground_level, np.zeros(1280)))) - within_1_num
-    within_4pt5_num = np.sum(np.sign(np.maximum(4500-ground_level, np.zeros(1280)))) - within_2_num - within_1_num
     zero_frame = np.sign(-ground_level) + 1
+    lv1_threshold = 4500
+    lv2_threshold = 2000
+    lv3_threshold = 1000
     lv3_frame = np.zeros_like(ground_level)
-    lv3_frame[ground_level < 1000] = 1
+    lv3_frame[ground_level < lv3_threshold] = 1
     lv2_frame = np.zeros_like(ground_level)
-    lv2_frame[ground_level < 2000] = 1
+    lv2_frame[ground_level < lv2_threshold] = 1
     lv1_frame = np.zeros_like(ground_level)
-    lv1_frame[ground_level < 4500] = 1
+    lv1_frame[ground_level < lv1_threshold] = 1
     sum_frame = lv1_frame + lv2_frame + lv3_frame
-    sum_frame[zero_frame == 1] = 0
+    sum_frame[zero_frame == 1 | height_frame == 1] = 0
     print(ground_level)
     print(sum_frame)
     plt.figure()
