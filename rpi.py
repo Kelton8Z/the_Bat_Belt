@@ -43,7 +43,8 @@ def filterInvalidDepth(stereoFrame, D):
 
 def getRowBase(midBase, col, angleStep, midCol = 640, HFOV = 71.9):
     colDiff = np.abs(col - midCol)
-    return midBase / np.cos(colDiff * angleStep)
+    # return midBase / np.cos(colDiff * angleStep)
+    return midBase
 
 def vecToDict(vec):
     d = {}
@@ -81,7 +82,7 @@ def normalize(vals):
     return res
 
 
-def rateSubframe(ground_level, baseMat, features):
+def rateSubframe(ground_level, baseMat):
     '''
         only the distance and not the speed matters for ground level obstacles
         return alert levels of 0/1/2/3
@@ -137,7 +138,7 @@ def rateSubframe(ground_level, baseMat, features):
     print(mid_diff)
     print(bottom_diff)'''
     #print(level)
-    divided = ground_level.transpose() / baseMat
+    divided = ground_level / baseMat
     height_threshold = 0.95
     height_frame = np.zeros_like(divided)
     height_frame[divided > height_threshold] = 1
@@ -155,24 +156,31 @@ def rateSubframe(ground_level, baseMat, features):
     lv1_frame = np.zeros_like(ground_level)
     lv1_frame[ground_level < lv1_threshold] = 1
     sum_frame = lv1_frame + lv2_frame + lv3_frame
-    sum_frame[zero_frame == 1 | height_frame == 1] = 0
-    print(ground_level)
-    print(sum_frame)
+    sum_frame[zero_frame == 1] = 0
+    filtered_frame = np.copy(sum_frame)
+    filtered_frame[height_frame == 1] = 0
+    """
     plt.figure()
-    _, axarr = plt.subplots(2, 3)
-    axarr[0,0].imshow(ground_level)
+    _, axarr = plt.subplots(2, 4)
+    axarr[0,0].imshow(disparityFrame)
+    axarr[0,0].set_title("disparity")
     axarr[0,1].imshow(zero_frame)
     axarr[0,2].imshow(lv3_frame)
-    axarr[1,0].imshow(lv2_frame)
-    axarr[1,1].imshow(lv1_frame)
-    axarr[1,2].imshow(sum_frame)
-    plt.show()
-    sys.exit()
-    if within_1_num > num_of_pixel:
+    axarr[0,3].imshow(lv2_frame)
+    axarr[1,0].imshow(lv1_frame)
+    axarr[1,1].imshow(sum_frame)
+    axarr[1,1].set_title("threat level (no filter)")
+    axarr[1,2].imshow(height_frame)
+    axarr[1,3].imshow(filtered_frame)
+    axarr[1,3].set_title("threat level (ground filtered)")
+    #plt.show()
+    #sys.exit()
+    """
+    if np.sum(filtered_frame[filtered_frame >= 3].astype(int)) > num_of_pixel:
         return 3
-    if within_2_num > num_of_pixel:
+    if np.sum(filtered_frame[filtered_frame >= 2].astype(int)) > num_of_pixel:
         return 2
-    if within_4pt5_num > num_of_pixel:
+    if np.sum(filtered_frame[filtered_frame >= 1].astype(int)) > num_of_pixel:
         return 1
     return 0
 
@@ -180,7 +188,8 @@ def rateSubframe(ground_level, baseMat, features):
     assert(level in [0,1,2,3])
     return level'''
 
-def rateAlertFromDepthCamera(ground_level, baseMat, trackedFeatures):
+def rateAlertFromDepthCamera(ground_level, baseMat, disparityFrame):
+    """
     rightFeatures = []
     leftFeatures = []
     for trackedFeature in trackedFeatures:
@@ -190,9 +199,14 @@ def rateAlertFromDepthCamera(ground_level, baseMat, trackedFeatures):
                 rightFeatures.append(trackedFeature)
             else:
                 leftFeatures.append(trackedFeature)
-
-    right_level = rateSubframe(ground_level, baseMat, leftFeatures)
-    left_level = rateSubframe(ground_level, baseMat, rightFeatures)
+    """
+    midCol = baseMat.shape[0] // 2
+    left_frame = ground_level[:, :midCol]
+    right_frame = ground_level[:, midCol:]
+    left_baseMat = baseMat[:, :midCol]
+    right_baseMat = baseMat[:, midCol:]
+    left_level = rateSubframe(left_frame, left_baseMat)
+    right_level = rateSubframe(right_frame, right_baseMat)
     return (left_level, right_level)
 
 if __name__ == '__main__':
@@ -217,9 +231,9 @@ if __name__ == '__main__':
     sock.send('\x1A')'''
     james_speak('alex dumb')
 
-    rgbFrame, stereoFrame, trackedFeatures = getAugmentedFeature()
+    stereoFrame, disparityFrame = getAugmentedFeature()
     timestamp = stereoFrame.getTimestamp()
-    rgbFrame, stereoFrame = rgbFrame.getFrame()[:720], stereoFrame.getFrame()
+    stereoFrame = stereoFrame.getFrame()
     # trackedFeatures = trackedFeatures.trackedFeatures
     # calibration
     # 720 x 1280, where valid values are within [350, 5520], ignore 0s
@@ -234,11 +248,13 @@ if __name__ == '__main__':
     reg = Ridge().fit(x, baseline_reciprocal, np.array(range(len(x)))+1)
     pred = 1 / reg.predict(np.array(range(rowNum)).reshape(-1, 1))
 
-    angleStep = (71.9 / 640) * (np.pi / 180)
+    angleStep = (71.9 / 1280) * (np.pi / 180)
     baseMat = np.empty_like(stereoFrame, dtype=float).transpose()
     for i in range(colNum):
         baseMat[i] = getRowBase(pred, i, angleStep)
+    baseMat = baseMat.transpose()
     print(f'calibration time : {timestamp}')
+
     # plt.plot(np.flip(baseline))
     # plt.plot(np.flip(pred))
     # plt.xlabel("pixels from near to far")
@@ -249,16 +265,16 @@ if __name__ == '__main__':
     #assert(pred.shape==(400,))
     #baselineDict = vecToDict(pred)
     feature_IDs = set()
+    print("start main kernel")
     while True:
     # filming
-        rgbFrame, stereoFrame, trackedFeatures = getAugmentedFeature()
-        rgbFrame, stereoFrame = rgbFrame.getFrame()[:720], stereoFrame.getFrame()
-        trackedFeatures = trackedFeatures.trackedFeatures
-        errors = []
+        stereoFrame, disparityFrame = getAugmentedFeature()
+        stereoFrame = stereoFrame.getFrame()
+        disparityFrame = disparityFrame.getFrame()
         #frame = np.zeros(stereoFrame.shape)
         #ground_level_Dict = frameToDict(stereoFrame)
         ground_level = stereoFrame
-        left_level, right_level = rateAlertFromDepthCamera(ground_level, baseMat, trackedFeatures)
+        left_level, right_level = rateAlertFromDepthCamera(ground_level, baseMat, disparityFrame)
         print(f'left level {left_level}')
         print(f'right level {right_level}')
 
