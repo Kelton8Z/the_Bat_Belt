@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import glob
 import serial
 import cv2
 import numpy as np
@@ -146,16 +147,13 @@ def rateSubframe(ground_level, baseMat):
     num_of_pixel = 50000
     zero_num = np.sum(np.sign(-ground_level + 1))
     zero_frame = np.sign(-ground_level) + 1
-    lv1_threshold = 4500
-    lv2_threshold = 2000
-    lv3_threshold = 1000
-    lv3_frame = np.zeros_like(ground_level)
-    lv3_frame[ground_level < lv3_threshold] = 1
+    lv1_threshold = 1000
+    lv2_threshold = 500
     lv2_frame = np.zeros_like(ground_level)
     lv2_frame[ground_level < lv2_threshold] = 1
     lv1_frame = np.zeros_like(ground_level)
     lv1_frame[ground_level < lv1_threshold] = 1
-    sum_frame = lv1_frame + lv2_frame + lv3_frame
+    sum_frame = lv1_frame + lv2_frame
     sum_frame[zero_frame == 1] = 0
     filtered_frame = np.copy(sum_frame)
     filtered_frame[height_frame == 1] = 0
@@ -209,6 +207,8 @@ def rateAlertFromDepthCamera(ground_level, baseMat, disparityFrame):
     right_level = rateSubframe(right_frame, right_baseMat)
     return (left_level, right_level)
 
+import timeit
+
 if __name__ == '__main__':
     '''
     import bluetooth
@@ -229,6 +229,7 @@ if __name__ == '__main__':
     sock = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
     sock.connect(bd_addr, port)
     sock.send('\x1A')'''
+
     james_speak('alex dumb')
 
     stereoFrame, disparityFrame = getAugmentedFeature()
@@ -267,13 +268,14 @@ if __name__ == '__main__':
     feature_IDs = set()
     print("start main kernel")
     # the same baud rate as the one used on Arduino
-    ser = serial.Serial('/dev/ttyACM0', 9600, timeout=1)
+    port = glob.glob('/dev/ttyACM*')[0]
+    ser = serial.Serial(port, 9600, timeout=1)
     # # clear what could be left in the buffer
     ser.reset_input_buffer()
-    module_indices = []
+    module_indices = [i for i in range(6)]
     historical_readings = defaultdict(list)
     # distance_threshold = 100
-    for i in range(1, 7):
+    for i in range(6):
         historical_readings[i] = [0]
 
     while True:
@@ -282,10 +284,13 @@ if __name__ == '__main__':
             if line == 'SystemOnline':
                 break
 
-    ser.write(b"activateSensor")
+    ser.write(b"activateSensor\n")
     last_intensities = [-1 for i in range(6)]
+    cnt = 0
+    total = 0
     while True:
     # filming
+        start = timeit.default_timer()
         stereoFrame, disparityFrame = getAugmentedFeature()
         stereoFrame = stereoFrame.getFrame()
         disparityFrame = disparityFrame.getFrame()
@@ -302,13 +307,13 @@ if __name__ == '__main__':
             # msg: <debug msg>
             print(line)
             if line.startswith('data'):
-                _, sensor_readings = line.split(' ')
+                _, *sensor_readings = line.split(' ')
                 for module_idx, sensor_reading in enumerate(sensor_readings):
                     sensor_reading = int(sensor_reading)
 #                     module_indices.append(module_idx)
                     historical_readings[module_idx].append(sensor_reading)
             elif line.startswith('msg'):
-                pass
+                print(line)
             elif line.startswith('error'):
                 print(line)
 
@@ -329,21 +334,33 @@ if __name__ == '__main__':
                 dx = current_reading - last_reading
                 # 200ms between readings
                 # e.g. 1m/s = 200cm/0.2s
-                if dx > 300 or current_reading <= 100: # speed>3m/s or distance <= 1m
-                    intensity = 3
-                elif dx > 200 or current_reading <= 200: # speed>2m/s or distance <= 2m
-                    intensity = 2
-                elif dx > 100 or current_reading <= 450: # speed>1m/s or distance <= 4.5m
-                    intensity = 1
-                else:
-                    intensity = 0
+                intensity = last_intensities[module_idx]
+                if current_reading > 0:
+                    if current_reading <= 50:
+                        intensity = 2
+                    elif current_reading <= 100:
+                        intensity = 1
+                    elif current_reading <= 200:
+                        intensity = 0 if dx <= 70 else 2
+                    elif current_reading <= 300:
+                        intensity = 0 if dx <= 70 else 1
+                    else:
+                        intensity = 0
+                if module_idx == 2:
+                    intensity = max(intensity, left_level)
+                elif module_idx == 3:
+                    intensity = max(intensity, right_level)
+
                 print(intensity)
-                if intensity > 0 and intensity != last_intensities[module_idx]:
+                if intensity != last_intensities[module_idx]:
                     last_intensities[module_idx] = intensity
                     ser.write(bytes("modifyVibrator " + str(module_idx) + str(intensity), 'utf-8'))
                     print("modifyVibrator " + str(module_idx) +  str(intensity))
-                else:
-                    ser.write(bytes("modifyVibrator " + str(module_idx), 'utf-8'))
+        end = timeit.default_timer()
+        cnt += 1
+        diff = end - start
+        total += diff
+        print(total/cnt)
 
     #     # if input("break ?")=='b':
     #     # if keyboard.read_key():
