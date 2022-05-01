@@ -255,7 +255,20 @@ if __name__ == '__main__':
         baseMat[i] = getRowBase(pred, i, angleStep)
     baseMat = baseMat.transpose()
     print(f'calibration time : {timestamp}')
+    port = glob.glob('/dev/ttyACM*')[0]
+    ser = serial.Serial(port, 9600, timeout=1)
+    # # clear what could be left in the buffer
+    ser.reset_input_buffer()
 
+    while True:
+        if ser.in_waiting > 0:
+            line = ser.readline().decode('utf-8').rstrip()
+            if line == 'SystemOnline':
+                break
+
+    ser.write(b"activateSensor\n")
+    for i in range(1,7):
+        ser.write(bytes("modifyVibrator " + str(i) + '2', 'utf-8'))
     # plt.plot(np.flip(baseline))
     # plt.plot(np.flip(pred))
     # plt.xlabel("pixels from near to far")
@@ -268,23 +281,15 @@ if __name__ == '__main__':
     feature_IDs = set()
     print("start main kernel")
     # the same baud rate as the one used on Arduino
-    port = glob.glob('/dev/ttyACM*')[0]
-    ser = serial.Serial(port, 9600, timeout=1)
-    # # clear what could be left in the buffer
-    ser.reset_input_buffer()
+
+
     module_indices = [i for i in range(6)]
     historical_readings = defaultdict(list)
     # distance_threshold = 100
     for i in range(6):
         historical_readings[i] = [0]
 
-    while True:
-        if ser.in_waiting > 0:
-            line = ser.readline().decode('utf-8').rstrip()
-            if line == 'SystemOnline':
-                break
 
-    ser.write(b"activateSensor\n")
     last_intensities = [-1 for i in range(6)]
     cnt = 0
     total = 0
@@ -298,8 +303,9 @@ if __name__ == '__main__':
         #ground_level_Dict = frameToDict(stereoFrame)
         ground_level = stereoFrame
         left_level, right_level = rateAlertFromDepthCamera(ground_level, baseMat, disparityFrame)
-        # print(f'left level {left_level}')
-        # print(f'right level {right_level}')
+        print(f'left level {left_level}')
+        print(f'right level {right_level}')
+
 
         if ser.in_waiting > 0:
             line = ser.readline().decode('utf-8').rstrip()
@@ -326,7 +332,7 @@ if __name__ == '__main__':
     #     # deactivateVibrator <num>
     #     # deactivateSensor
         for module_idx in module_indices:
-            if len(historical_readings[module_idx]) >= 1:
+            if True:#len(historical_readings[module_idx]) >= 1:
                 print(historical_readings)
                 current_reading = historical_readings[module_idx][-1]
 
