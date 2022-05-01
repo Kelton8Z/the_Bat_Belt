@@ -208,6 +208,7 @@ def rateAlertFromDepthCamera(ground_level, baseMat, disparityFrame):
     return (left_level, right_level)
 
 import timeit
+import copy
 
 if __name__ == '__main__':
     '''
@@ -262,13 +263,18 @@ if __name__ == '__main__':
 
     while True:
         if ser.in_waiting > 0:
-            line = ser.readline().decode('utf-8').rstrip()
-            if line == 'SystemOnline':
+            line = ser.readline().rstrip()
+            if line == b'SystemOnline':
                 break
 
     ser.write(b"activateSensor\n")
-    for i in range(1,7):
-        ser.write(bytes("modifyVibrator " + str(i) + '2', 'utf-8'))
+    while True:
+        if ser.in_waiting > 0:
+            line = ser.readline().rstrip()
+            print(line)
+            if line == b'MSG: Sensors have been activated fresh':
+                break
+    ser.write(bytes("modifyVibrator 12 22 32 42 52 62", 'utf-8'))
     # plt.plot(np.flip(baseline))
     # plt.plot(np.flip(pred))
     # plt.xlabel("pixels from near to far")
@@ -284,10 +290,12 @@ if __name__ == '__main__':
 
 
     module_indices = [i for i in range(6)]
-    historical_readings = defaultdict(list)
+    historical_readings = [0,0,0,0,0,0]#defaultdict(list)
+    sensor_readings =[]
+
     # distance_threshold = 100
-    for i in range(6):
-        historical_readings[i] = [0]
+    #for i in range(6):
+    #    historical_readings[i] = [0]
 
 
     last_intensities = [-1 for i in range(6)]
@@ -306,23 +314,24 @@ if __name__ == '__main__':
         print(f'left level {left_level}')
         print(f'right level {right_level}')
 
-
-        if ser.in_waiting > 0:
-            line = ser.readline().decode('utf-8').rstrip()
+        while True:
+            if ser.in_waiting > 0:
+                lines = ser.read(size=1000).decode('utf-8').rstrip()
+                print('lines: ' + lines + '\n')
             # data: <reading 0-500> x6
             # msg: <debug msg>
-            print(line)
-            if line.startswith('data'):
-                _, *sensor_readings = line.split(' ')
-                for module_idx, sensor_reading in enumerate(sensor_readings):
-                    sensor_reading = int(sensor_reading)
-#                     module_indices.append(module_idx)
-                    historical_readings[module_idx].append(sensor_reading)
-            elif line.startswith('msg'):
-                print(line)
-            elif line.startswith('error'):
-                print(line)
-
+                for line in lines.split('\n'):
+                    print("line:", line)
+                    if line.startswith('data'):
+                        _, *sensor_readings = line.split(' ')
+                        assert(len(sensor_readings)==6)
+    #                     module_indices.append(module_idx)
+                        #historical_readings[module_idx].append(sensor_reading)
+                    elif line.startswith('msg'):
+                        print(line)
+                    elif line.startswith('error'):
+                        print(line)
+                break
 
     #     # Rate “threat level” of each identified obstacle based on distance and speed
     #     # Activate vibration system accordingly
@@ -331,13 +340,12 @@ if __name__ == '__main__':
     #     # modifyVibrator <num 1-6><level 1-3>
     #     # deactivateVibrator <num>
     #     # deactivateSensor
+        print(sensor_readings)
+        sensor_readings = list(map(int, sensor_readings))
         for module_idx in module_indices:
             if True:#len(historical_readings[module_idx]) >= 1:
-                print(historical_readings)
-                current_reading = historical_readings[module_idx][-1]
-
-                last_reading = historical_readings[module_idx].pop(0)
-                dx = current_reading - last_reading
+                current_reading = sensor_readings[module_idx]
+                dx = current_reading - historical_readings[module_idx]
                 # 200ms between readings
                 # e.g. 1m/s = 200cm/0.2s
                 intensity = last_intensities[module_idx]
@@ -362,6 +370,7 @@ if __name__ == '__main__':
                     last_intensities[module_idx] = intensity
                     ser.write(bytes("modifyVibrator " + str(module_idx) + str(intensity), 'utf-8'))
                     print("modifyVibrator " + str(module_idx) +  str(intensity))
+        historical_readings = copy.copy(sensor_readings)
         end = timeit.default_timer()
         cnt += 1
         diff = end - start
