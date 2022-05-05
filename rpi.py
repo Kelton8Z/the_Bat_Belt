@@ -256,6 +256,7 @@ if __name__ == '__main__':
         baseMat[i] = getRowBase(pred, i, angleStep)
     baseMat = baseMat.transpose()
     print(f'calibration time : {timestamp}')
+    '''
     port = glob.glob('/dev/ttyACM*')[0]
     ser = serial.Serial(port, 9600, timeout=1)
     # # clear what could be left in the buffer
@@ -274,7 +275,7 @@ if __name__ == '__main__':
             print(line)
             if line == b'MSG: Sensors have been activated fresh':
                 break
-    ser.write(bytes("modifyVibrator 12 22 32 42 52 62", 'utf-8'))
+    ser.write(bytes("modifyVibrator 12 22 32 42 52 62", 'utf-8'))'''
     # plt.plot(np.flip(baseline))
     # plt.plot(np.flip(pred))
     # plt.xlabel("pixels from near to far")
@@ -313,7 +314,7 @@ if __name__ == '__main__':
         left_level, right_level = rateAlertFromDepthCamera(ground_level, baseMat, disparityFrame)
         print(f'left level {left_level}')
         print(f'right level {right_level}')
-
+'''
         while True:
             if ser.in_waiting > 0:
                 lines = ser.read(size=1000).decode('utf-8').rstrip()
@@ -371,6 +372,7 @@ if __name__ == '__main__':
                     ser.write(bytes("modifyVibrator " + str(module_idx) + str(intensity), 'utf-8'))
                     print("modifyVibrator " + str(module_idx) +  str(intensity))
         historical_readings = copy.copy(sensor_readings)
+        '''
         end = timeit.default_timer()
         cnt += 1
         diff = end - start
