@@ -29,11 +29,13 @@ long duration; // variable for the duration of sound wave travel
 int distance; // variable for the distance measurement
 
 int sensorDist[6] = {0, 0, 0, 0, 0, 0};
+int prevDist[6] = {0, 0, 0, 0, 0, 0};
 
-
+long prevTime = 0;
 
 bool activeSensor = false;
 bool vibChanged = false;
+bool reportData = false;
 
 
 void setup() {
@@ -64,6 +66,10 @@ void loop() {
     } else if (myStr == "deactivateSensor") {
       activeSensor = false;
       Serial.println("MSG: Sensors have been deactivated");
+    }  else if (myStr == "reportData") {
+        reportData = true;
+    } else if (myStr == "stopReport") {
+        reportData = false;
     } else if (myStr == "modifyVibrator") {
       // Indicate that vibration status has been changed
       vibChanged = true;
@@ -76,7 +82,7 @@ void loop() {
         if (numData == 0) {
           Serial.println("error: Modify Vibrator received 0 or noninteger data");
           break;
-        }
+        }  
         int vibIndex = numData / 10;
         if (vibIndex > NUM_SENSOR || vibIndex < 1) {
           Serial.println("error: Modify Vibrator received vibIndex > NUM_SENSOR or < 1");
@@ -105,7 +111,7 @@ void loop() {
         Serial.print(token);
         token = strtok(NULL, " ");
       }
-      Serial.println("");
+      Serial.println("");   
     }
   }
 
@@ -113,9 +119,17 @@ void loop() {
   if (vibChanged) {
     for (int i = 0; i < NUM_SENSOR; i++) {
       // Comeback to this to check vibration levels
-      analogWrite(vibPin[i], vibStatus[i] * 50);
+      if (vibStatus[i] == 0){
+        analogWrite(vibPin[i], 0);
+      } else if (vibStatus[i] == 1) {
+        analogWrite(vibPin[i], 80);
+      } else if (vibStatus[i] == 2) {
+        analogWrite(vibPin[i], 155); 
+      }
     }
     vibChanged = false;
+    long timeDiff = micros() - prevTime;
+    Serial.println(timeDiff);
   }
 
   // go through each sensor
@@ -140,14 +154,40 @@ void loop() {
     sensorDist[currentSensor] = distance;
     currentSensor = currentSensor + 1;
     currentSensor = currentSensor % NUM_SENSOR;
+    if (currentSensor == 1) {
+      prevTime = micros();
+    }
     if (currentSensor == 0) {
-      Serial.print("data: ");
-      Serial.print(" ");
+      // Process all information in sensors and figure out intensity
       for (int i = 0; i < NUM_SENSOR; i++){
-        Serial.print(sensorDist[i]);
-        Serial.print(" ");
+        int diff = prevDist[i] - sensorDist[i];
+        int dist = sensorDist[i];
+        int intensity = 0;
+        if (dist == 0){
+          intensity = 0;
+        } else if ( dist < 40 || ( dist < 80 && diff > 25 ) ){
+          intensity = 2;
+        } else if ( dist < 80 || (dist < 200 && diff > 30 ) ){
+          intensity = 1;
+        } else{
+          intensity = 0;
+        }
+        if (intensity != vibStatus[i]){
+          vibStatus[i] = intensity;
+          vibChanged = true;
+        }
+        prevDist[i] = sensorDist[i];
       }
-      Serial.println("");
+
+      // send message through serial if prompted
+      if (reportData ){
+        String dataMsg = "data:";
+        for (int i = 0; i < NUM_SENSOR; i++){
+          dataMsg = dataMsg + " ";
+          dataMsg = dataMsg + sensorDist[i];
+        }
+        Serial.println(dataMsg);
+      }
     }
   }
 }
